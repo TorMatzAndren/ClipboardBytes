@@ -8,7 +8,7 @@ from clipboard_signal import ClipboardSignal
 from window_manager import WindowManager
 
 
-def main() -> int:
+def main():
     app = QApplication(sys.argv)
     app.setApplicationName("ClipboardBytes")
     app.setQuitOnLastWindowClosed(False)
@@ -17,7 +17,7 @@ def main() -> int:
     clipboard = ClipboardSignal(app)
     manager = WindowManager(app, config)
 
-    clipboard.byte_count_changed.connect(manager.update_clipboard_bytes)
+    clipboard.payload_changed.connect(manager.update_payload)
 
     manager.start()
     clipboard.refresh()

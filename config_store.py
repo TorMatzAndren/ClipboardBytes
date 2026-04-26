@@ -5,12 +5,53 @@ from pathlib import Path
 class ConfigStore:
     VERSION = 1
     MIN_VISIBLE_WIDTH = 40
-    ASSUMED_HEIGHT = 28
-    ASSUMED_MIN_WIDTH = 90
+
+    DEFAULT_SETTINGS = {
+        "export_dir": str(Path.home() / "ClipboardBytesExports"),
+        "write_metadata_json": False,
+    }
 
     def __init__(self):
-        self.config_dir = Path.home() / ".config" / "clipboardbytes"
+        # Dev build uses separate state so it does not inherit bad/stable v1 positions.
+        self.config_dir = Path.home() / ".config" / "clipboardbytes-dev"
         self.state_path = self.config_dir / "state.json"
+
+    def load_settings(self):
+        data = self._read_state()
+        settings = data.get("settings", {})
+
+        result = dict(self.DEFAULT_SETTINGS)
+
+        if isinstance(settings, dict):
+            export_dir = settings.get("export_dir")
+            write_metadata_json = settings.get("write_metadata_json")
+
+            if isinstance(export_dir, str) and export_dir.strip():
+                result["export_dir"] = export_dir
+
+            if isinstance(write_metadata_json, bool):
+                result["write_metadata_json"] = write_metadata_json
+
+        return result
+
+    def save_settings(self, settings):
+        data = self._read_state()
+        clean_settings = dict(self.DEFAULT_SETTINGS)
+
+        export_dir = settings.get("export_dir")
+        write_metadata_json = settings.get("write_metadata_json")
+
+        if isinstance(export_dir, str) and export_dir.strip():
+            clean_settings["export_dir"] = export_dir
+
+        if isinstance(write_metadata_json, bool):
+            clean_settings["write_metadata_json"] = write_metadata_json
+
+        data["version"] = self.VERSION
+        data["settings"] = clean_settings
+        data.setdefault("windows", [])
+
+        self._write_state(data)
 
     def load_windows(self, screens):
         data = self._read_state()
@@ -75,12 +116,11 @@ class ConfigStore:
             }
         )
 
-        self._write_state(
-            {
-                "version": self.VERSION,
-                "windows": windows,
-            }
-        )
+        data["version"] = self.VERSION
+        data["windows"] = windows
+        data.setdefault("settings", dict(self.DEFAULT_SETTINGS))
+
+        self._write_state(data)
 
     def remove_window(self, window_id):
         data = self._read_state()
@@ -91,22 +131,18 @@ class ConfigStore:
             if isinstance(item, dict) and item.get("id") != window_id
         ]
 
-        self._write_state(
-            {
-                "version": self.VERSION,
-                "windows": windows,
-            }
-        )
+        data["version"] = self.VERSION
+        data["windows"] = windows
+        data.setdefault("settings", dict(self.DEFAULT_SETTINGS))
 
-    def clamp_position(self, x, y, screen_geometry):
-        min_left = (
-            screen_geometry.left()
-            - self.ASSUMED_MIN_WIDTH
-            + self.MIN_VISIBLE_WIDTH
-        )
+        self._write_state(data)
+
+    def clamp_position(self, x, y, screen_geometry, window_width=150, window_height=82):
+        min_left = screen_geometry.left()
         max_left = screen_geometry.right() - self.MIN_VISIBLE_WIDTH
+
         min_top = screen_geometry.top()
-        max_top = screen_geometry.bottom() - self.ASSUMED_HEIGHT
+        max_top = screen_geometry.bottom() - max(28, int(window_height))
 
         clamped_x = max(min_left, min(int(x), max_left))
         clamped_y = max(min_top, min(int(y), max_top))
@@ -116,24 +152,27 @@ class ConfigStore:
     def _read_state(self):
         try:
             if not self.state_path.exists():
-                return {"version": self.VERSION, "windows": []}
+                return self._default_state()
 
             with self.state_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
 
             if not isinstance(data, dict):
-                return {"version": self.VERSION, "windows": []}
+                return self._default_state()
 
             if data.get("version") != self.VERSION:
-                return {"version": self.VERSION, "windows": []}
+                return self._default_state()
 
-            if not isinstance(data.get("windows"), list):
-                return {"version": self.VERSION, "windows": []}
+            if not isinstance(data.get("windows", []), list):
+                data["windows"] = []
+
+            if not isinstance(data.get("settings", {}), dict):
+                data["settings"] = dict(self.DEFAULT_SETTINGS)
 
             return data
 
         except Exception:
-            return {"version": self.VERSION, "windows": []}
+            return self._default_state()
 
     def _write_state(self, data):
         try:
@@ -141,10 +180,17 @@ class ConfigStore:
 
             tmp_path = self.state_path.with_suffix(".json.tmp")
             with tmp_path.open("w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+                json.dump(data, f, indent=2, ensure_ascii=False)
                 f.write("\n")
 
             tmp_path.replace(self.state_path)
 
         except Exception:
             pass
+
+    def _default_state(self):
+        return {
+            "version": self.VERSION,
+            "settings": dict(self.DEFAULT_SETTINGS),
+            "windows": [],
+        }

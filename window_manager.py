@@ -1,33 +1,45 @@
 import uuid
 
+from PyQt6.QtWidgets import QFileDialog
+
+from clipboard_exporter import ClipboardExporter
 from overlay_window import OverlayWindow
 
 
 class WindowManager:
-    OFFSET_X = 220
-    OFFSET_Y = 8
+    DEFAULT_MARGIN_X = 20
+    DEFAULT_MARGIN_Y = 20
 
     def __init__(self, app, config_store):
         self.app = app
         self.config_store = config_store
+        self.settings = self.config_store.load_settings()
+
+        self.exporter = ClipboardExporter(
+            export_dir=self.settings["export_dir"],
+            write_metadata_json=self.settings["write_metadata_json"],
+        )
+
         self.windows = []
-        self.current_byte_count = 0
+        self.current_payload = None
 
     def start(self):
         screens = self.app.screens()
         saved_windows = self.config_store.load_windows(screens)
 
-        # --- Restore locked windows first ---
         for saved in saved_windows:
             screen = self._find_screen(saved["screen"])
             if screen is None:
                 continue
 
-            geometry = screen.geometry()
+            geometry = screen.availableGeometry()
+
             x, y = self.config_store.clamp_position(
                 saved["x"],
                 saved["y"],
                 geometry,
+                window_width=150,
+                window_height=98,
             )
 
             window = self._create_window(
@@ -38,14 +50,22 @@ class WindowManager:
                 y=y,
             )
             window.show()
+            window.force_topmost()
 
-        # --- If nothing restored, create ONE window only ---
         if not self.windows:
             primary_screen = self.app.primaryScreen()
-            geometry = primary_screen.geometry()
+            geometry = primary_screen.availableGeometry()
 
-            x = geometry.left() + self.OFFSET_X
-            y = geometry.bottom() - 28 - self.OFFSET_Y
+            x = geometry.right() - 150 - self.DEFAULT_MARGIN_X
+            y = geometry.bottom() - 98 - self.DEFAULT_MARGIN_Y
+
+            x, y = self.config_store.clamp_position(
+                x,
+                y,
+                geometry,
+                window_width=150,
+                window_height=98,
+            )
 
             window = self._create_window(
                 screen_name=primary_screen.name(),
@@ -55,12 +75,68 @@ class WindowManager:
                 y=y,
             )
             window.show()
+            window.force_topmost()
 
-    def update_clipboard_bytes(self, text, byte_count):
-        self.current_byte_count = byte_count
+    def update_payload(self, payload):
+        self.current_payload = payload
 
         for window in list(self.windows):
-            window.set_byte_count(byte_count)
+            window.set_payload(payload)
+
+    def export_current_payload(self):
+        if self.current_payload is None:
+            self._broadcast_save_status(ok=False, message="nothing to save")
+            return
+
+        try:
+            result = self.exporter.export_payload(
+                self.current_payload,
+                self.app.clipboard(),
+            )
+        except Exception as exc:
+            self._broadcast_save_status(ok=False, message=f"save error: {exc}")
+            return
+
+        self._broadcast_save_status(
+            ok=bool(result.get("ok")),
+            message=result.get("message", "saved" if result.get("ok") else "save failed"),
+        )
+
+    def open_export_folder(self):
+        try:
+            self.exporter.open_export_folder()
+        except Exception as exc:
+            self._broadcast_save_status(ok=False, message=f"open error: {exc}")
+            return
+
+        self._broadcast_save_status(ok=True, message="folder opened")
+
+    def choose_export_folder(self, parent=None):
+        selected = QFileDialog.getExistingDirectory(
+            parent,
+            "Choose ClipboardBytes export folder",
+            self.settings["export_dir"],
+        )
+
+        if not selected:
+            return
+
+        self.settings["export_dir"] = selected
+        self._save_settings()
+        self._broadcast_save_status(ok=True, message="export folder set")
+
+    def toggle_metadata_json(self):
+        self.settings["write_metadata_json"] = not self.settings["write_metadata_json"]
+        self._save_settings()
+
+        state = "on" if self.settings["write_metadata_json"] else "off"
+        self._broadcast_save_status(ok=True, message=f"metadata json {state}")
+
+    def metadata_json_enabled(self):
+        return bool(self.settings.get("write_metadata_json", False))
+
+    def export_folder(self):
+        return self.settings.get("export_dir", "")
 
     def add_clone(self, source_window):
         x = source_window.x() + source_window.width() + 10
@@ -73,7 +149,10 @@ class WindowManager:
             x=x,
             y=y,
         )
-        window.set_byte_count(self.current_byte_count)
+
+        if self.current_payload is not None:
+            window.set_payload(self.current_payload)
+
         window.show()
         window.force_topmost()
 
@@ -103,8 +182,21 @@ class WindowManager:
         else:
             self.config_store.remove_window(window.window_id)
 
+        window.sync_lock_button()
+
     def exit_app(self):
         self.app.quit()
+
+    def _save_settings(self):
+        self.config_store.save_settings(self.settings)
+        self.exporter.configure(
+            export_dir=self.settings["export_dir"],
+            write_metadata_json=self.settings["write_metadata_json"],
+        )
+
+    def _broadcast_save_status(self, ok, message):
+        for window in list(self.windows):
+            window.set_save_status(ok=ok, message=message)
 
     def _create_window(self, screen_name, window_id, locked, x, y):
         window = OverlayWindow(

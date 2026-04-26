@@ -1,13 +1,17 @@
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
+from clipboard_payload import ClipboardPayloadReader
+
 
 class ClipboardSignal(QObject):
-    byte_count_changed = pyqtSignal(str, int)
+    payload_changed = pyqtSignal(object)
 
     def __init__(self, app):
         super().__init__()
         self._clipboard = app.clipboard()
-        self._last_text = None
+        self._reader = ClipboardPayloadReader()
+
+        self._last_signature = None
 
         self._delay_timer = QTimer(self)
         self._delay_timer.setSingleShot(True)
@@ -21,13 +25,17 @@ class ClipboardSignal(QObject):
         self._delay_timer.start()
 
     def refresh(self):
-        text = self._clipboard.text() or ""
+        payload = self._reader.read(self._clipboard)
 
-        if text == self._last_text:
-            byte_count = len(text.encode("utf-8"))
-            self.byte_count_changed.emit(text, byte_count)
+        signature = (
+            payload.kind,
+            payload.size_bytes,
+            payload.mime_type,
+            payload.subtype,
+        )
+
+        if signature == self._last_signature:
             return
 
-        self._last_text = text
-        byte_count = len(text.encode("utf-8"))
-        self.byte_count_changed.emit(text, byte_count)
+        self._last_signature = signature
+        self.payload_changed.emit(payload)

@@ -1,8 +1,80 @@
 # ClipboardBytes (Linux)
 
-ClipboardBytes is a tiny desktop overlay that shows the current clipboard text size in bytes.
+ClipboardBytes is a lightweight, always-on-top clipboard overlay for Linux that shows exact byte size and content type in real time.
 
-It exists as a **visible truth signal** for copy/paste workflows where clipboard operations can fail silently, lag, or paste stale content (e.g. browsers, ChatGPT, terminals, SSH, RDP).
+Originally created as a **visible truth signal** for clipboard operations, it has evolved into a **deterministic content classifier** for developer workflows.
+
+---
+
+# Core purpose
+
+ClipboardBytes solves one problem:
+
+    "Did my clipboard actually update — and what is it?"
+
+It exists because clipboard operations can fail silently, lag, or paste stale content (e.g. browsers, ChatGPT, terminals, SSH, RDP).
+
+---
+
+# Supported content types
+
+- Plain text with language hints
+- JSON with structure size
+- Python
+- JavaScript
+- Rust
+- Go
+- Java
+- C#
+- Bash
+- HTML
+- CSS
+- Markdown
+- Mixed multi-file clipboard payloads
+- Images with resolution and byte size
+- Files and URLs
+
+---
+
+# Core behavior
+
+- Monitors clipboard changes in real time
+- Shows UTF-8 byte size for text
+- Shows detected content type
+- Shows copy age
+- Uses color-coded overlay borders
+- Provides tooltip details (MIME type, confidence, raw formats, structure)
+- Exports clipboard payloads
+- Avoids guessing when classification is ambiguous
+
+---
+
+# Deterministic classification rule
+
+ClipboardBytes follows a strict rule:
+
+    Never guess. Only classify when structurally certain.
+
+If content is ambiguous, it falls back to text and may provide hints.
+
+Example:
+
+    TEXT
+    UTF-8
+    contains python 54%, javascript 40%
+
+---
+
+# Mixed payload detection
+
+ClipboardBytes detects mixed content when clipboard text contains explicit multi-file or multi-structure payloads.
+
+Example:
+
+    MIXED
+    mixed file-bundle, json-like, js/tsx, css
+
+This is especially useful when copying multiple files into the clipboard.
 
 ---
 
@@ -83,13 +155,12 @@ Run with:
 
 ---
 
-# Behavior
+# UI behavior
 
-- Shows: <N> bytes
-- Counts clipboard text as UTF-8 bytes
-- Flashes green for about 2 seconds on new clipboard data
-- White text normally
+- Displays size and content type
+- Flash indicator on clipboard update
 - Always-on-top overlay
+- Static window size
 - One window on startup
 
 Right-click menu:
@@ -109,7 +180,7 @@ State is stored in:
 
 Only locked windows are saved.
 
-Example structure:
+Example:
 
     {
       "version": 1,
@@ -126,11 +197,31 @@ Example structure:
 
 ---
 
+# Export behavior
+
+ClipboardBytes can export clipboard payloads.
+
+Examples:
+
+- text → .txt
+- json → .json
+- html → .html
+- css → .css
+- code → language extension
+- images → .png or native format
+- file lists → .txt
+- mixed payloads → .txt
+
+---
+
 # Project structure
 
     ClipboardBytes/
     ├── clipboardbytes.py
     ├── clipboard_signal.py
+    ├── clipboard_payload.py
+    ├── clipboard_exporter.py
+    ├── code_detector.py
     ├── overlay_window.py
     ├── window_manager.py
     ├── config_store.py
@@ -175,9 +266,9 @@ Or from terminal:
 
 # Design principles
 
-- minimal implementation
 - deterministic behavior
 - observable state
+- minimal implementation
 - no daemon
 - no tray icon
 - no unnecessary features
@@ -185,9 +276,14 @@ Or from terminal:
 
 ---
 
-# Summary
+# Status
 
-ClipboardBytes solves one problem:
+Stable Linux-first PyQt6 implementation.
 
-    "Did my clipboard actually update — and how big is it?"
+Evolving toward a compact developer clipboard HUD with deterministic inspection, export, history, and explainable classification.
 
+---
+
+# Author
+
+Tor Matz Andrén

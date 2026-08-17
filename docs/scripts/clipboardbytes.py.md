@@ -1,5 +1,6 @@
 Title: clipboardbytes.py
 Date: 2026-04-24
+Updated: 2026-08-17
 Author: Matz
 Type: script
 Subsystem: clipboardbytes
@@ -11,44 +12,47 @@ File: clipboardbytes.py
 
 ## Purpose
 
-Application entrypoint.
-
-Initializes the system and starts the Qt event loop.
-
----
+Application entrypoint and top-level orchestration.
 
 ## Responsibilities
 
-- Create QApplication
-- Disable quit-on-last-window-close behavior
-- Create ConfigStore
-- Create ClipboardSignal
-- Create WindowManager
-- Connect clipboard events to window updates
-- Trigger initial clipboard read
-- Start Qt event loop
-
----
+- create `QApplication`;
+- create `ConfigStore`;
+- create `ClipboardSignal`;
+- create `WindowManager`;
+- create the Jarri Clipboard Register adapter;
+- connect provenance observations to the Register adapter;
+- connect presentation updates to `WindowManager`;
+- perform the initial presentation-only clipboard inspection;
+- start the Qt event loop.
 
 ## Flow
 
-1. QApplication created
-2. ConfigStore initialized
-3. ClipboardSignal initialized
-4. WindowManager initialized
-5. Signal connection:
+    QApplication
+      ↓
+    ClipboardSignal
+      ├── observation_ready
+      │       ↓
+      │   JarriClipboardRegister
+      │
+      └── payload_changed
+              ↓
+          WindowManager
 
-   clipboard_signal → window_manager.update_clipboard_bytes
+Startup then calls:
 
-6. WindowManager.start()
-7. ClipboardSignal.refresh()
-8. app.exec()
+    ClipboardSignal.refresh()
 
----
+The initial refresh updates presentation only.
 
-## Notes
+It does not create a provenance observation.
 
-- No UI logic exists here
-- No clipboard logic exists here
-- No persistence logic exists here
-- Pure orchestration layer
+## Ownership
+
+No clipboard classification logic lives in this entrypoint.
+
+No Jarri storage schema logic lives here.
+
+No UI rendering logic lives here.
+
+The file only composes independently owned components.

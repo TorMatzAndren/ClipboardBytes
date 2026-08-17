@@ -172,6 +172,68 @@ Right-click menu:
 
 ---
 
+# Clipboard observation and Jarri provenance
+
+ClipboardBytes distinguishes between two different event semantics.
+
+A real desktop clipboard transition produces a `ClipboardObservation`.
+
+A `ClipboardObservation` contains:
+
+- the classified `ClipboardPayload`;
+- the stable content bytes captured at the same observation edge.
+
+Real clipboard transitions emit `observation_ready` before presentation
+deduplication.
+
+This signal can feed the Jarri Clipboard Register so that repeated clipboard
+content remains distinct in temporal provenance even when its content identity
+has appeared before.
+
+Application startup is different.
+
+ClipboardBytes inspects the current clipboard when it starts so that the HUD
+can present current state, but startup inspection does not create a provenance
+observation because no new clipboard transition occurred.
+
+Presentation also remains independent from provenance.
+
+The HUD may suppress an identical repeated visual state, while every genuine
+clipboard transition can still be recorded historically.
+
+Presentation identity includes a SHA-256 digest of captured content, so
+different same-sized payloads are not accidentally treated as identical merely
+because their kind, MIME type, size, and subtype match.
+
+## Jarri Clipboard Register integration
+
+`jarri_clipboard_register.py` adapts `ClipboardObservation` into the Jarri
+Clipboard Register ingest interface:
+
+    /opt/jarri/tools/clipboard-register/clipboard_register.py
+
+The adapter sends the already-captured observation bytes.
+
+It does not reread the live desktop clipboard.
+
+Clipboard Register failures are contained so that provenance persistence
+cannot terminate the ClipboardBytes observer or HUD.
+
+The current integration has been exercised with:
+
+- ordinary text;
+- repeated identical text;
+- same-sized different text;
+- browser text;
+- file / URI-list clipboard content;
+- PNG images;
+- Jarri Workspace logical-tab screenshots.
+
+A 5016 × 2088 Workspace PNG of 987204 bytes was observed repeatedly with the
+same SHA-256 content identity while retaining separate temporal observations.
+
+---
+
 # Persistence
 
 State is stored in:
@@ -221,10 +283,12 @@ Examples:
     ├── clipboard_signal.py
     ├── clipboard_payload.py
     ├── clipboard_exporter.py
+    ├── jarri_clipboard_register.py
     ├── code_detector.py
     ├── overlay_window.py
     ├── window_manager.py
     ├── config_store.py
+    ├── test_clipboard_register_integration.py
     ├── run_clipboardbytes.sh
     └── README.md
 

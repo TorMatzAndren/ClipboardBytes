@@ -23,6 +23,12 @@ class ClipboardPayload:
     copied_at: str = ""
 
 
+@dataclass(frozen=True)
+class ClipboardObservation:
+    payload: ClipboardPayload
+    content_bytes: Optional[bytes]
+
+
 def human_size(size_bytes: Optional[int]) -> str:
     if size_bytes is None:
         return "size unavailable"
@@ -45,9 +51,36 @@ class ClipboardPayloadReader:
         self.code_detector = CodeDetector()
 
     def read(self, clipboard) -> ClipboardPayload:
+        return self.read_observation(clipboard).payload
+
+    def read_observation(self, clipboard) -> ClipboardObservation:
         mime_data = clipboard.mimeData()
         raw_formats = list(mime_data.formats())
         copied_at = datetime.now().isoformat(timespec="seconds")
+
+        payload = self._read_payload(
+            clipboard,
+            mime_data,
+            raw_formats,
+            copied_at,
+        )
+
+        return ClipboardObservation(
+            payload=payload,
+            content_bytes=self._content_bytes(
+                payload,
+                clipboard,
+                mime_data,
+            ),
+        )
+
+    def _read_payload(
+        self,
+        clipboard,
+        mime_data,
+        raw_formats,
+        copied_at,
+    ) -> ClipboardPayload:
 
         image_format = self._first_matching_format(raw_formats, "image/")
         if mime_data.hasImage() or image_format or "application/x-qt-image" in raw_formats:
@@ -155,6 +188,40 @@ class ClipboardPayloadReader:
             raw_formats=raw_formats,
             copied_at=copied_at,
         )
+
+    def _content_bytes(self, payload, clipboard, mime_data):
+        if payload.text is not None:
+            return payload.text.encode("utf-8")
+
+        if payload.kind == "files":
+            return (
+                "\n".join(payload.urls)
+                + ("\n" if payload.urls else "")
+            ).encode("utf-8")
+
+        if payload.mime_type:
+            raw = mime_data.data(payload.mime_type)
+            if raw is not None and not raw.isEmpty():
+                return bytes(raw)
+
+        if payload.kind == "image":
+            image = clipboard.image()
+            if image.isNull():
+                return None
+
+            data = QByteArray()
+            buffer = QBuffer(data)
+            buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+
+            try:
+                if not image.save(buffer, "PNG"):
+                    return None
+            finally:
+                buffer.close()
+
+            return bytes(data)
+
+        return None
 
     def _detect_mixed_text(self, text):
         stripped = text.strip()

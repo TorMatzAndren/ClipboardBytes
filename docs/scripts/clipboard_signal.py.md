@@ -1,5 +1,6 @@
 Title: clipboard_signal.py
 Date: 2026-04-24
+Updated: 2026-08-17
 Author: Matz
 Type: script
 Subsystem: clipboardbytes
@@ -11,44 +12,76 @@ File: clipboard_signal.py
 
 ## Purpose
 
-Clipboard signal layer.
+Clipboard event and publication layer.
 
-Responsible for detecting clipboard changes and calculating byte size.
+The signal layer separates:
 
----
+- real clipboard observation;
+- startup/current-state inspection;
+- human-facing presentation updates.
 
-## Responsibilities
+## Signals
 
-- Access system clipboard via Qt
-- Listen to clipboard change events
-- Delay clipboard reads slightly
-- Read clipboard text
-- Compute UTF-8 byte count
-- Emit byte_count_changed(text, byte_count)
+`observation_ready`
 
----
+Emitted for a real debounced `QClipboard.dataChanged` transition.
 
-## Byte Counting
+The signal carries a `ClipboardObservation` containing both semantic payload
+metadata and the content bytes captured for that observation.
 
-Uses UTF-8:
+It is emitted before presentation deduplication.
 
-    len(text.encode("utf-8"))
+This allows durable provenance to retain repeated clipboard observations.
 
----
+`payload_changed`
 
-## Flow
+Emitted when ClipboardBytes presentation should update.
 
-1. Clipboard emits dataChanged
-2. Delay timer starts (~120 ms)
-3. Clipboard text read
-4. Byte count calculated
-5. Signal emitted
+Presentation deduplication is independent from provenance observation.
 
----
+## Startup Inspection
 
-## Notes
+`refresh()` reads and presents the current clipboard state.
 
-- Prevents duplicate updates using last_text
-- No UI logic
-- No persistence logic
-- Pure signal and transformation layer
+It intentionally does not emit `observation_ready`.
+
+Starting ClipboardBytes therefore does not manufacture a historical clipboard
+event.
+
+## Real Clipboard Change
+
+A real desktop clipboard transition follows:
+
+    QClipboard.dataChanged
+      → 120 ms debounce
+      → read_observation()
+      → observation_ready
+      → presentation decision
+      → optional payload_changed
+
+## Presentation Identity
+
+Presentation identity includes:
+
+- kind;
+- byte count;
+- MIME type;
+- subtype;
+- SHA-256 digest of captured content bytes.
+
+Including content identity prevents same-sized different payloads from being
+silently collapsed by the HUD.
+
+Repeated identical content can still be suppressed visually while remaining
+separate provenance observations.
+
+## Failure Boundary
+
+Ordinary observation-acquisition, observation-consumer, and presentation
+exceptions are contained at the Qt timer callback boundary.
+
+Such failures are reported diagnostically rather than being allowed to escape
+into PyQt and terminate the application.
+
+`KeyboardInterrupt` and other `BaseException` subclasses are intentionally not
+treated as ordinary runtime failures.

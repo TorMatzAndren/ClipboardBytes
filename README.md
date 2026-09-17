@@ -19,6 +19,7 @@ It exists because clipboard operations can fail silently, lag, or paste stale co
 # Supported content types
 
 - Plain text with language hints
+- Codex handoff transcripts
 - JSON with structure size
 - Python
 - JavaScript
@@ -56,6 +57,10 @@ ClipboardBytes follows a strict rule:
     Never guess. Only classify when structurally certain.
 
 If content is ambiguous, it falls back to text and may provide hints.
+
+Explicit artifact identity takes precedence over embedded syntax inference.
+For example, a canonical Codex handoff remains `CODEX` even when the
+transcript contains Python, Rust, shell commands, diffs, JSON, or prose.
 
 Example:
 

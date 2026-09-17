@@ -108,6 +108,19 @@ class ClipboardPayloadReader:
     def _read_text(self, text, raw_formats, copied_at):
         size_bytes = len(text.encode("utf-8"))
 
+        codex_subtype = self._detect_codex_handoff(text)
+        if codex_subtype:
+            return ClipboardPayload(
+                kind="codex",
+                size_bytes=size_bytes,
+                size_label=human_size(size_bytes),
+                mime_type="text/x-codex-handoff",
+                subtype=codex_subtype,
+                text=text,
+                raw_formats=raw_formats,
+                copied_at=copied_at,
+            )
+
         mixed_subtype = self._detect_mixed_text(text)
         if mixed_subtype:
             return ClipboardPayload(
@@ -188,6 +201,49 @@ class ClipboardPayloadReader:
             raw_formats=raw_formats,
             copied_at=copied_at,
         )
+
+    def _detect_codex_handoff(self, text):
+        if "===== CODEX SESSION =====" not in text:
+            return None
+
+        has_transport_identity = bool(
+            re.search(
+                r"^PATH:\s*CODEX:thisrepo:[^\r\n]*$",
+                text,
+                re.MULTILINE,
+            )
+        )
+
+        has_session_identity = bool(
+            re.search(
+                r"^session-file:\s*\S*/\.codex/sessions/\S*rollout-\S*\.jsonl\s*$",
+                text,
+                re.MULTILINE,
+            )
+        )
+
+        if not (has_transport_identity or has_session_identity):
+            return None
+
+        if not re.search(
+            r"^===== USER =====\s*$",
+            text,
+            re.MULTILINE,
+        ):
+            return None
+
+        if not re.search(
+            r"^===== (?:"
+            r"ASSISTANT(?: \[[^\]\r\n]+\])?"
+            r"|TOOL CALL(?: \[[^\]\r\n]+\])?"
+            r"|TOOL OUTPUT"
+            r") =====\s*$",
+            text,
+            re.MULTILINE,
+        ):
+            return None
+
+        return "Codex handoff"
 
     def _content_bytes(self, payload, clipboard, mime_data):
         if payload.text is not None:

@@ -1,8 +1,8 @@
 # ClipboardBytes (Linux)
 
-ClipboardBytes is a lightweight, always-on-top clipboard overlay for Linux that shows exact byte size and content type in real time.
+ClipboardBytes is a lightweight Linux clipboard inspector and developer clipboard HUD that shows exact byte size and content type in real time.
 
-Originally created as a **visible truth signal** for clipboard operations, it has evolved into a **deterministic content classifier** for developer workflows.
+Originally created as a **visible truth signal** for clipboard operations, it has evolved into a **deterministic content classifier** for developer workflows, including first-class Codex handoff transcripts and Jarri clipboard provenance.
 
 ---
 
@@ -67,6 +67,33 @@ Example:
     TEXT
     UTF-8
     contains python 54%, javascript 40%
+
+---
+
+# Codex handoff transcripts
+
+ClipboardBytes recognizes canonical Codex handoff transcripts as a first-class
+clipboard artifact type.
+
+A Codex handoff is classified as `CODEX` before generic text or programming
+language inference. The transcript may contain Python, Rust, C, shell commands,
+JSON, diffs, tool output, prose, or several of these at once without being
+misclassified as `TEXT`, `MIXED`, or an incidental source language.
+
+Canonical handoffs may include a transport identity such as:
+
+    PATH: CODEX:thisrepo:0
+
+and session metadata including repository context.
+
+When Git repository provenance is available, ClipboardBytes carries that
+repository identity into its Jarri Clipboard Register integration. This allows
+downstream history and provenance tooling to distinguish Codex work by the
+repository in which the turn occurred rather than treating every Codex
+transcript as anonymous clipboard text.
+
+This is useful for repository-aware development workflows, clipboard history,
+Codex session handoff, and causal reconstruction of work across Jarri tools.
 
 ---
 
@@ -347,9 +374,9 @@ Or from terminal:
 
 # Status
 
-Stable Linux-first PyQt6 implementation.
+Stable Linux-first PyQt6 clipboard inspector and developer HUD.
 
-Evolving toward a compact developer clipboard HUD with deterministic inspection, export, history, and explainable classification.
+Evolving toward deterministic clipboard inspection, export, history, Codex handoff recognition, Git repository provenance, and explainable classification.
 
 ---
 

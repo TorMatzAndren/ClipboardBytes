@@ -58,6 +58,16 @@ class JarriClipboardRegister:
         if payload.subtype:
             command.extend(["--subtype", payload.subtype])
 
+        if observation.repository_root:
+            command.extend(
+                ["--repository-root", observation.repository_root]
+            )
+
+        if observation.repository_name:
+            command.extend(
+                ["--repository-name", observation.repository_name]
+            )
+
         process = subprocess.run(
             command,
             input=content,

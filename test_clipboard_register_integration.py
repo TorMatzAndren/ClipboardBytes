@@ -43,6 +43,8 @@ def observation(
     kind="text",
     mime_type="text/plain",
     subtype="UTF-8 · classifier fallback",
+    repository_root=None,
+    repository_name=None,
 ):
     return ClipboardObservation(
         payload=ClipboardPayload(
@@ -55,6 +57,8 @@ def observation(
             copied_at="2026-08-17T19:30:00",
         ),
         content_bytes=content,
+        repository_root=repository_root,
+        repository_name=repository_name,
     )
 
 
@@ -149,6 +153,47 @@ class ClipboardRegisterAdapterTests(unittest.TestCase):
             result["error"],
             "clipboard_register_exception",
         )
+
+    def test_adapter_forwards_repository_provenance(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            wrapper = Path(tempdir) / "wrapper.py"
+            output = Path(tempdir) / "args.txt"
+
+            wrapper.write_text(
+                f"""#!/usr/bin/env python3
+import pathlib
+import sys
+
+pathlib.Path({str(output)!r}).write_text(
+    "\\n".join(sys.argv[1:])
+)
+sys.stdin.buffer.read()
+"""
+            )
+            wrapper.chmod(0o755)
+
+            adapter = JarriClipboardRegister(
+                register_path=wrapper
+            )
+
+            result = adapter.record(
+                observation(
+                    b"codex",
+                    kind="codex",
+                    mime_type="text/x-codex-handoff",
+                    subtype="Codex handoff",
+                    repository_root="/home/test/project",
+                    repository_name="project",
+                )
+            )
+
+            self.assertTrue(result["ok"])
+
+            args = output.read_text().splitlines()
+            self.assertIn("--repository-root", args)
+            self.assertIn("/home/test/project", args)
+            self.assertIn("--repository-name", args)
+            self.assertIn("project", args)
 
     def test_adapter_passes_captured_bytes_not_live_clipboard(self):
         with tempfile.TemporaryDirectory() as tempdir:

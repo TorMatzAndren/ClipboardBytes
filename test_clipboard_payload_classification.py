@@ -62,6 +62,28 @@ pwd
         self.assertEqual(payload.subtype, "Codex handoff")
         self.assertEqual(payload.mime_type, "text/x-codex-handoff")
 
+    def test_codex_repository_root_is_extracted(self):
+        text = codex_handoff(
+            """===== TOOL CALL [exec] =====
+pwd
+
+===== TOOL OUTPUT =====
+/home/test/project"""
+        )
+
+        self.assertEqual(
+            self.reader._codex_repository_root(text),
+            "/home/test/project",
+        )
+
+    def test_non_codex_repository_text_is_not_classified_as_codex(self):
+        text = """repo-root: /home/test/not-a-codex-session
+ordinary clipboard text
+"""
+        payload = self.classify(text)
+
+        self.assertNotEqual(payload.kind, "codex")
+
     def test_codex_handoff_containing_python_stays_codex(self):
         self.assert_kind(
             codex_handoff(

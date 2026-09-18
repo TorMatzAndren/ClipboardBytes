@@ -27,6 +27,8 @@ class ClipboardPayload:
 class ClipboardObservation:
     payload: ClipboardPayload
     content_bytes: Optional[bytes]
+    repository_root: Optional[str] = None
+    repository_name: Optional[str] = None
 
 
 def human_size(size_bytes: Optional[int]) -> str:
@@ -65,6 +67,14 @@ class ClipboardPayloadReader:
             copied_at,
         )
 
+        repository_root = None
+        repository_name = None
+
+        if payload.kind == "codex" and payload.text is not None:
+            repository_root = self._codex_repository_root(payload.text)
+            if repository_root:
+                repository_name = Path(repository_root).name or None
+
         return ClipboardObservation(
             payload=payload,
             content_bytes=self._content_bytes(
@@ -72,6 +82,8 @@ class ClipboardPayloadReader:
                 clipboard,
                 mime_data,
             ),
+            repository_root=repository_root,
+            repository_name=repository_name,
         )
 
     def _read_payload(
@@ -201,6 +213,18 @@ class ClipboardPayloadReader:
             raw_formats=raw_formats,
             copied_at=copied_at,
         )
+
+    def _codex_repository_root(self, text):
+        match = re.search(
+            r"^repo-root:\s*(\S.*?)\s*$",
+            text,
+            re.MULTILINE,
+        )
+        if not match:
+            return None
+
+        repository_root = match.group(1).strip()
+        return repository_root or None
 
     def _detect_codex_handoff(self, text):
         if "===== CODEX SESSION =====" not in text:

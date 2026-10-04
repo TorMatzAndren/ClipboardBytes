@@ -5,7 +5,10 @@ import sys
 from PyQt6.QtWidgets import QApplication
 
 from clipboard_signal import ClipboardSignal
-from jarri_clipboard_register import JarriClipboardRegister
+from jarri_clipboard_register import (
+    JarriClipboardRegister,
+    OrderedClipboardRegisterWriter,
+)
 
 
 def main():
@@ -22,11 +25,14 @@ def main():
     app.setQuitOnLastWindowClosed(False)
 
     clipboard = ClipboardSignal(app)
-    register = JarriClipboardRegister()
+    register_writer = OrderedClipboardRegisterWriter(
+        JarriClipboardRegister()
+    )
 
     clipboard.observation_ready.connect(
-        register.record
+        register_writer.enqueue
     )
+    app.aboutToQuit.connect(register_writer.close)
 
     if not headless:
         from config_store import ConfigStore

@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
 from clipboard_payload import ClipboardObservation, ClipboardPayload
 from clipboard_signal import ClipboardSignal
 from jarri_clipboard_register import JarriClipboardRegister
+from jarri_clipboard_register import OrderedClipboardRegisterWriter
 
 
 class DummyConnectSignal:
     def connect(self, callback):
         self.callback = callback
+
+    def emit(self):
+        self.callback()
 
 
 class DummyClipboard:
@@ -35,6 +40,11 @@ class FakeReader:
     def read_observation(self, clipboard):
         self.calls += 1
         return self.observation
+
+
+class FakeTimer:
+    def start(self):
+        pass
 
 
 def observation(
@@ -66,6 +76,7 @@ class ClipboardSignalSemanticsTests(unittest.TestCase):
     def make_signal(self, initial):
         signal = ClipboardSignal(DummyApp())
         signal._reader = FakeReader(initial)
+        signal._presentation_timer = FakeTimer()
         return signal
 
     def test_startup_refresh_does_not_emit_provenance_observation(self):
@@ -92,7 +103,8 @@ class ClipboardSignalSemanticsTests(unittest.TestCase):
         signal.observation_ready.connect(provenance.append)
         signal.payload_changed.connect(presentation.append)
 
-        signal._refresh_observed_change()
+        signal._clipboard.dataChanged.emit()
+        signal._publish_pending_presentation()
 
         self.assertEqual(provenance, [observed])
         self.assertEqual(len(presentation), 1)
@@ -103,10 +115,12 @@ class ClipboardSignalSemanticsTests(unittest.TestCase):
         presentation = []
         signal.payload_changed.connect(presentation.append)
 
-        signal._refresh_observed_change()
+        signal._clipboard.dataChanged.emit()
+        signal._publish_pending_presentation()
 
         signal._reader.observation = observation(b"dog")
-        signal._refresh_observed_change()
+        signal._clipboard.dataChanged.emit()
+        signal._publish_pending_presentation()
 
         self.assertEqual(len(presentation), 2)
 
@@ -120,11 +134,25 @@ class ClipboardSignalSemanticsTests(unittest.TestCase):
         signal.observation_ready.connect(provenance.append)
         signal.payload_changed.connect(presentation.append)
 
-        signal._refresh_observed_change()
-        signal._refresh_observed_change()
+        signal._clipboard.dataChanged.emit()
+        signal._clipboard.dataChanged.emit()
+        signal._publish_pending_presentation()
 
         self.assertEqual(len(provenance), 2)
         self.assertEqual(len(presentation), 1)
+
+    def test_changes_within_debounce_interval_each_capture_observation(self):
+        first = observation(b"first")
+        second = observation(b"second")
+        signal = self.make_signal(first)
+        provenance = []
+        signal.observation_ready.connect(provenance.append)
+
+        signal._clipboard.dataChanged.emit()
+        signal._reader.observation = second
+        signal._clipboard.dataChanged.emit()
+
+        self.assertEqual(provenance, [first, second])
 
     def test_acquisition_failure_does_not_escape_timer_callback(self):
         signal = self.make_signal(observation(b"unused"))
@@ -134,8 +162,8 @@ class ClipboardSignalSemanticsTests(unittest.TestCase):
 
         signal._reader.read_observation = fail
 
-        # The failure may be logged, but it must not escape.
-        signal._refresh_observed_change()
+        # The failure may be logged, but it must not escape the Qt callback.
+        signal._clipboard.dataChanged.emit()
 
 
 class ClipboardRegisterAdapterTests(unittest.TestCase):
@@ -237,6 +265,57 @@ pathlib.Path({str(output)!r}).write_bytes(data)
                 output.read_bytes(),
                 b"captured-at-observation-edge",
             )
+
+
+class OrderedClipboardRegisterWriterTests(unittest.TestCase):
+    def test_slow_register_does_not_block_acquisition_or_drop_next_item(self):
+        started = threading.Event()
+        release = threading.Event()
+        completed = []
+
+        class SlowRegister:
+            def record(self, item):
+                if item.payload.text == "first":
+                    started.set()
+                    release.wait(2)
+                completed.append(item.payload.text)
+                return {"ok": True}
+
+        writer = OrderedClipboardRegisterWriter(SlowRegister())
+        signal = ClipboardSignal(DummyApp())
+        signal._reader = FakeReader(observation(b"first"))
+        signal._presentation_timer = FakeTimer()
+        signal.observation_ready.connect(writer.enqueue)
+        try:
+            signal._clipboard.dataChanged.emit()
+            self.assertTrue(started.wait(1))
+
+            second = observation(b"second")
+            signal._reader.observation = second
+            signal._clipboard.dataChanged.emit()
+            self.assertEqual(signal._reader.calls, 2)
+            self.assertEqual(signal._pending_presentation, second)
+        finally:
+            release.set()
+            writer.close()
+
+        self.assertEqual(completed, ["first", "second"])
+
+    def test_register_failures_are_contained_and_writer_continues(self):
+        recorded = []
+
+        class FailingRegister:
+            def record(self, item):
+                if item.payload.text == "first":
+                    raise RuntimeError("synthetic register failure")
+                recorded.append(item.payload.text)
+                return {"ok": True}
+
+        writer = OrderedClipboardRegisterWriter(FailingRegister())
+        writer.enqueue(observation(b"first"))
+        writer.enqueue(observation(b"second"))
+        writer.close()
+        self.assertEqual(recorded, ["second"])
 
 
 if __name__ == "__main__":

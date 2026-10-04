@@ -17,20 +17,34 @@ class ClipboardSignal(QObject):
 
         self._last_presentation_signature = None
 
-        self._delay_timer = QTimer(self)
-        self._delay_timer.setSingleShot(True)
-        self._delay_timer.setInterval(120)
-        self._delay_timer.timeout.connect(
-            self._refresh_observed_change
+        self._presentation_timer = QTimer(self)
+        self._presentation_timer.setSingleShot(True)
+        self._presentation_timer.setInterval(120)
+        self._presentation_timer.timeout.connect(
+            self._publish_pending_presentation
         )
+        self._pending_presentation = None
 
         self._clipboard.dataChanged.connect(
             self._on_clipboard_changed
         )
 
     def _on_clipboard_changed(self):
-        self._delay_timer.stop()
-        self._delay_timer.start()
+        try:
+            observation = self._reader.read_observation(
+                self._clipboard
+            )
+        except Exception:
+            print(
+                "ClipboardBytes observation acquisition failed:",
+                flush=True,
+            )
+            traceback.print_exc()
+            return
+
+        self._emit_observation(observation)
+        self._pending_presentation = observation
+        self._presentation_timer.start()
 
     def refresh(self):
         """
@@ -45,12 +59,7 @@ class ClipboardSignal(QObject):
         self._publish_presentation(observation)
 
     def _refresh_observed_change(self):
-        """
-        Handle a real debounced QClipboard.dataChanged edge.
-
-        Ordinary acquisition or consumer failures must not escape into Qt's
-        timer callback and terminate ClipboardBytes.
-        """
+        """Compatibility helper for callers that explicitly request capture."""
         try:
             observation = self._reader.read_observation(
                 self._clipboard
@@ -63,6 +72,11 @@ class ClipboardSignal(QObject):
             traceback.print_exc()
             return
 
+        self._emit_observation(observation)
+        self._pending_presentation = observation
+        self._publish_pending_presentation()
+
+    def _emit_observation(self, observation):
         try:
             self.observation_ready.emit(observation)
         except Exception:
@@ -71,6 +85,12 @@ class ClipboardSignal(QObject):
                 flush=True,
             )
             traceback.print_exc()
+
+    def _publish_pending_presentation(self):
+        observation = self._pending_presentation
+        self._pending_presentation = None
+        if observation is None:
+            return
 
         try:
             self._publish_presentation(observation)

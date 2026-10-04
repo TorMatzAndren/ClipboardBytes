@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import subprocess
+import queue
+import threading
 import traceback
 from pathlib import Path
 
@@ -94,3 +96,62 @@ class JarriClipboardRegister:
                 errors="replace",
             ).strip(),
         }
+
+
+class OrderedClipboardRegisterWriter:
+    """Persist captured observations on one FIFO worker thread."""
+
+    _STOP = object()
+
+    def __init__(self, register):
+        self.register = register
+        self._queue = queue.Queue()
+        self._lock = threading.Lock()
+        self._closed = False
+        self._thread = threading.Thread(
+            target=self._run,
+            name="ClipboardBytesRegisterWriter",
+            daemon=False,
+        )
+        self._thread.start()
+
+    def enqueue(self, observation):
+        with self._lock:
+            if self._closed:
+                print(
+                    "ClipboardBytes register writer is closed; "
+                    "observation was not queued",
+                    flush=True,
+                )
+                return False
+            self._queue.put(observation)
+            return True
+
+    def close(self):
+        with self._lock:
+            if not self._closed:
+                self._closed = True
+                self._queue.put(self._STOP)
+        self._thread.join()
+
+    def _run(self):
+        while True:
+            observation = self._queue.get()
+            try:
+                if observation is self._STOP:
+                    return
+                result = self.register.record(observation)
+                if not result or not result.get("ok"):
+                    print(
+                        "ClipboardBytes register write failed: "
+                        f"{result!r}",
+                        flush=True,
+                    )
+            except Exception:
+                print(
+                    "ClipboardBytes register writer failed:",
+                    flush=True,
+                )
+                traceback.print_exc()
+            finally:
+                self._queue.task_done()

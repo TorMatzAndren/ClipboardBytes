@@ -1,3 +1,80 @@
+## Debian installation (v0.2.0)
+
+Install the `.deb` from the GitHub v0.2.0 release:
+
+```bash
+sudo apt install ./clipboardbytes_0.2.0_all.deb
+```
+
+Launch the desktop application:
+
+```bash
+clipboardbytes
+```
+
+Run without the overlay:
+
+```bash
+clipboardbytes --headless
+```
+
+The package installs application sources under `/opt/clipboardbytes`
+and a launcher at `/usr/bin/clipboardbytes`. It does not require a
+development source checkout.
+
+### Clipboard history and Jarri integration
+
+ClipboardBytes supports the external Jarri Clipboard Register.
+That component is separate from the Debian package. If its executable
+is unavailable, ClipboardBytes continues without persistent Jarri recording.
+
+v0.2.0 does not include an independent persistent clipboard-history
+database. Persistent recording requires the external register.
+
+### XFCE and X11 clipboard ownership
+
+XFCE may transfer clipboard ownership after a screenshot.
+ClipboardBytes uses X11 ownership metadata and XRes process identification
+to recognize verified persistence handoffs.
+
+Intentional repeated copies remain distinct events, even when their
+content is identical. Arbitrary time-based or hash-only deduplication
+is not used.
+
+### Diagnostics
+
+Enable JSON Lines diagnostics:
+
+```bash
+CLIPBOARDBYTES_DIAGNOSTICS=1 clipboardbytes --headless
+```
+
+Inspect XRes ownership from a source checkout:
+
+```bash
+python3 clipboard_xres_diagnostic.py
+```
+
+Diagnostics include hashes and event metadata, not clipboard plaintext.
+
+### Build from source
+
+```bash
+python3 -m unittest discover -v
+./packaging/build-deb.sh
+```
+
+The `.deb` is written to `dist/`, without installing it.
+
+### Development
+
+```bash
+./run_clipboardbytes.sh
+./run_clipboardbytes.sh --headless
+```
+
+The development launcher resolves its directory automatically.
+
 # ClipboardBytes (Linux)
 
 ClipboardBytes is a lightweight Linux clipboard inspector and developer clipboard HUD that shows exact byte size and content type in real time.

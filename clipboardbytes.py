@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 import sys
+from os import access, X_OK
 
 from PyQt6.QtWidgets import QApplication
 
 from clipboard_signal import ClipboardSignal
 from clipboard_diagnostics import ClipboardDiagnostics
 from jarri_clipboard_register import (
+    REGISTER,
     JarriClipboardRegister,
     OrderedClipboardRegisterWriter,
 )
@@ -27,15 +29,19 @@ def main():
 
     diagnostics = ClipboardDiagnostics.from_environment()
     clipboard = ClipboardSignal(app, diagnostics=diagnostics)
-    register_writer = OrderedClipboardRegisterWriter(
-        JarriClipboardRegister(),
-        diagnostics=diagnostics,
-    )
-
-    clipboard.observation_ready.connect(
-        register_writer.enqueue
-    )
-    app.aboutToQuit.connect(register_writer.close)
+    # The Jarri Clipboard Register is an optional external integration.
+    # Standalone ClipboardBytes must work without it.
+    if REGISTER.is_file() and access(REGISTER, X_OK):
+        register_writer = OrderedClipboardRegisterWriter(
+            JarriClipboardRegister(),
+            diagnostics=diagnostics,
+        )
+        clipboard.observation_ready.connect(
+            register_writer.enqueue
+        )
+        app.aboutToQuit.connect(register_writer.close)
+    else:
+        register_writer = None
 
     if not headless:
         from config_store import ConfigStore

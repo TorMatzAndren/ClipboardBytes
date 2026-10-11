@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ClipboardBytes
+Comment=Clipboard inspection and code classification
+Exec=clipboardbytes
+Terminal=false
+Categories=Utility;
+StartupNotify=false

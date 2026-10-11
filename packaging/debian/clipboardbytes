@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /opt/clipboardbytes
+exec /usr/bin/python3 /opt/clipboardbytes/clipboardbytes.py "$@"

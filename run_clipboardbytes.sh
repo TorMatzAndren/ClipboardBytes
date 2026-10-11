@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
-cd "$HOME/projects/ClipboardBytes" || exit 1
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 exec /usr/bin/python3 clipboardbytes.py "$@"

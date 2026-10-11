@@ -5,6 +5,7 @@ import sys
 from PyQt6.QtWidgets import QApplication
 
 from clipboard_signal import ClipboardSignal
+from clipboard_diagnostics import ClipboardDiagnostics
 from jarri_clipboard_register import (
     JarriClipboardRegister,
     OrderedClipboardRegisterWriter,
@@ -24,9 +25,11 @@ def main():
     app.setApplicationName("ClipboardBytes")
     app.setQuitOnLastWindowClosed(False)
 
-    clipboard = ClipboardSignal(app)
+    diagnostics = ClipboardDiagnostics.from_environment()
+    clipboard = ClipboardSignal(app, diagnostics=diagnostics)
     register_writer = OrderedClipboardRegisterWriter(
-        JarriClipboardRegister()
+        JarriClipboardRegister(),
+        diagnostics=diagnostics,
     )
 
     clipboard.observation_ready.connect(

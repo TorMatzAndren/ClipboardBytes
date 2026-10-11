@@ -24,7 +24,8 @@ The signal layer separates:
 
 `observation_ready`
 
-Emitted for a real debounced `QClipboard.dataChanged` transition.
+Emitted for a `QClipboard.dataChanged` transition except for the confirmed
+XFCE persistence-owner handoff described below.
 
 The signal carries a `ClipboardObservation` containing both semantic payload
 metadata and the content bytes captured for that observation.
@@ -32,6 +33,19 @@ metadata and the content bytes captured for that observation.
 It is emitted before presentation deduplication.
 
 This allows durable provenance to retain repeated clipboard observations.
+
+On X11, a callback is omitted from provenance only when all of these facts
+are available: the immediately preceding successful callback came from a
+non-manager owner; current ownership is stable across acquisition; the current
+clipboard owner is the same live `xfsettingsd` X client that owns the
+`CLIPBOARD_MANAGER` selection (confirmed by matching process identities); and
+the captured bytes, kind, and MIME type match the previous capture exactly.
+X-Resource client PID lookup is preferred, with `_NET_WM_PID` as fallback.
+This identifies the XFCE clipboard
+persistence handoff. Ownership uncertainty, changed payloads, and transfers
+to other applications fail open and remain observations. A new copy from an
+application after a handoff remains a distinct observation even if its bytes
+match an earlier copy.
 
 `payload_changed`
 

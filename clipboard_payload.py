@@ -29,6 +29,7 @@ class ClipboardObservation:
     content_bytes: Optional[bytes]
     repository_root: Optional[str] = None
     repository_name: Optional[str] = None
+    diagnostic_sequence: Optional[int] = None
 
 
 def human_size(size_bytes: Optional[int]) -> str:

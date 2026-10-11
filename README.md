@@ -48,6 +48,45 @@ It exists because clipboard operations can fail silently, lag, or paste stale co
 - Exports clipboard payloads
 - Avoids guessing when classification is ambiguous
 
+## Optional clipboard event diagnostics
+
+For X11 duplicate-event investigations, start ClipboardBytes with
+`CLIPBOARDBYTES_DIAGNOSTICS=1`. Diagnostics are disabled by default and are
+written as JSON Lines to stderr. For example:
+
+```bash
+CLIPBOARDBYTES_DIAGNOSTICS=1 ./run_clipboardbytes.sh --headless \
+  2> /tmp/clipboardbytes-diagnostics.jsonl
+```
+
+Stop the already-running ClipboardBytes instance before starting this command
+so the diagnostic run does not create a second observer. The trace records
+callback sequence and timing, process/thread identity, advertised MIME types,
+payload kind and SHA-256, acquisition result and duration, X11 CLIPBOARD and
+CLIPBOARD_MANAGER window/PID identities and owner executable when available,
+and correlated enqueue/register completion events. It never records clipboard
+payload bytes. The hash can still identify
+repeated content, so treat the diagnostic file as sensitive and remove it when
+the investigation is complete.
+
+### XFCE clipboard persistence provenance
+
+On X11, ClipboardBytes treats a byte-identical follow-up as the same logical
+copy only when the previous callback came from a non-manager owner and the
+current owner is confirmed as the live `xfsettingsd` process that also owns
+`CLIPBOARD_MANAGER`. The two selections may belong to distinct windows in that
+same X client. ClipboardBytes resolves their process identity through the
+X-Resource extension when available, with `_NET_WM_PID` as fallback;
+unavailable or mismatched identity fails open. Clipboard ownership must be
+stable across the current capture. Payload bytes, kind, and MIME type must match exactly.
+Only that persistence takeover callback is omitted from provenance; its
+original application observation is retained. Recopying the same content from
+an application creates another observation, and ownership changes to other
+applications are retained even when bytes match. If X11 ownership, manager
+selection, process identity, or payload data is unavailable or inconsistent,
+ClipboardBytes keeps the observation. No time window or hash-only rule is
+used.
+
 ---
 
 # Deterministic classification rule

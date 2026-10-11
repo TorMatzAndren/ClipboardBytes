@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-import subprocess
+import hashlib
+import json
 import queue
+import subprocess
 import threading
+import time
 import traceback
 from pathlib import Path
+
+from clipboard_diagnostics import ClipboardDiagnostics
 
 
 REGISTER = Path(
@@ -103,8 +108,9 @@ class OrderedClipboardRegisterWriter:
 
     _STOP = object()
 
-    def __init__(self, register):
+    def __init__(self, register, diagnostics=None):
         self.register = register
+        self.diagnostics = diagnostics or ClipboardDiagnostics()
         self._queue = queue.Queue()
         self._lock = threading.Lock()
         self._closed = False
@@ -125,6 +131,19 @@ class OrderedClipboardRegisterWriter:
                 )
                 return False
             self._queue.put(observation)
+            self.diagnostics.record(
+                "observation_enqueue",
+                sequence=observation.diagnostic_sequence,
+                payload_kind=observation.payload.kind,
+                payload_sha256=(
+                    hashlib.sha256(
+                        observation.content_bytes
+                    ).hexdigest()
+                    if observation.content_bytes is not None
+                    else None
+                ),
+                queue_depth=self._queue.qsize(),
+            )
             return True
 
     def close(self):
@@ -140,7 +159,28 @@ class OrderedClipboardRegisterWriter:
             try:
                 if observation is self._STOP:
                     return
+                write_started_ns = time.monotonic_ns()
                 result = self.register.record(observation)
+                fields = {
+                    "sequence": observation.diagnostic_sequence,
+                    "write_duration_ns": time.monotonic_ns() - write_started_ns,
+                    "write_ok": bool(result and result.get("ok")),
+                }
+                if result:
+                    fields["error"] = result.get("error")
+                    stdout = result.get("stdout")
+                    if stdout:
+                        try:
+                            register_result = json.loads(stdout)
+                            fields["observation_id"] = register_result.get(
+                                "observation_id"
+                            )
+                            fields["content_sha256"] = register_result.get(
+                                "content_sha256"
+                            )
+                        except (TypeError, ValueError):
+                            pass
+                self.diagnostics.record("register_write_complete", **fields)
                 if not result or not result.get("ok"):
                     print(
                         "ClipboardBytes register write failed: "
